@@ -5,3 +5,18 @@ services:
     ports:
       - "6380:6379"   # 6380 on host, so it won't clash with any other local Redis on 6379
     command: redis-server --appendonly yes
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: gateway-postgres
+    ports:
+      - "5433:5432"   # 5433 on host, so it won't clash with any other local Postgres on 5432
+    environment:
+      POSTGRES_DB: gateway
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: gateway
+    volumes:
+      - gateway-pg-data:/var/lib/postgresql/data
+
+volumes:
+  gateway-pg-data:
