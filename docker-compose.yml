@@ -1,0 +1,7 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: gateway-redis
+    ports:
+      - "6380:6379"   # 6380 on host, so it won't clash with any other local Redis on 6379
+    command: redis-server --appendonly yes

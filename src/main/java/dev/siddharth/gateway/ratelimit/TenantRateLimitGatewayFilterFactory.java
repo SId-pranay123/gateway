@@ -7,12 +7,11 @@ import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 
 /**
- * Gateway filter that enforces a per-tenant token bucket rate limit.
+ * Gateway filter that enforces a per-tenant token bucket rate limit,
+ * backed by Redis so the limit is correct across multiple gateway instances.
  *
  * Tenant is identified via the "X-Tenant-ID" request header. If absent,
- * falls back to a "default" tenant bucket — this keeps the filter usable
- * before real auth/tenant-resolution exists, and gives every unidentified
- * caller a single shared bucket rather than failing the request outright.
+ * falls back to a "default" tenant bucket.
  */
 @Component
 public class TenantRateLimitGatewayFilterFactory
@@ -21,9 +20,9 @@ public class TenantRateLimitGatewayFilterFactory
     private static final String TENANT_HEADER = "X-Tenant-ID";
     private static final String DEFAULT_TENANT = "default";
 
-    private final TenantBucketRegistry bucketRegistry;
+    private final RedisTenantBucketRegistry bucketRegistry;
 
-    public TenantRateLimitGatewayFilterFactory(TenantBucketRegistry bucketRegistry) {
+    public TenantRateLimitGatewayFilterFactory(RedisTenantBucketRegistry bucketRegistry) {
         super(Config.class);
         this.bucketRegistry = bucketRegistry;
     }
@@ -37,20 +36,18 @@ public class TenantRateLimitGatewayFilterFactory
                 tenantId = DEFAULT_TENANT;
             }
 
-            boolean allowed = bucketRegistry.tryConsume(tenantId);
-
-            if (allowed) {
-                return chain.filter(exchange);
-            } else {
-                exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
-                return exchange.getResponse().setComplete();
-            }
+            return bucketRegistry.tryConsume(tenantId)
+                    .flatMap(allowed -> {
+                        if (allowed) {
+                            return chain.filter(exchange);
+                        } else {
+                            exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
+                            return exchange.getResponse().setComplete();
+                        }
+                    });
         };
     }
 
     public static class Config {
-        // No configuration fields yet — limits are hardcoded in
-        // TenantBucketRegistry for now (Step 3). Step 5 will add
-        // per-tenant config loaded from Postgres.
     }
 }
