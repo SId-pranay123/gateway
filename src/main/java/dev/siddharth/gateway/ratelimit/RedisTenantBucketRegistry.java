@@ -40,9 +40,14 @@ public class RedisTenantBucketRegistry {
                 String.valueOf(now)
         );
 
+        final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(RedisTenantBucketRegistry.class);
+
         return redisTemplate.execute(rateLimitScript, keys, args)
                 .next() // execute() returns a Flux; the script returns a single value
                 .map(result -> result == 1L)
-                .onErrorReturn(true); // fail open
+                .onErrorResume(ex -> {
+                    log.error("Redis unavailable, failing open: {}", ex.getMessage());
+                    return Mono.just(true);
+                });
     }
 }

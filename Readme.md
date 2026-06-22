@@ -78,6 +78,13 @@ See `PROGRESS.md` for current build status and next steps.
 docker compose up
 ```
 
+## Observability
+
+Prometheus scrapes gateway metrics from Spring Actuator, and Grafana visualizes
+the gateway traffic and rate-limit behavior.
+
+![Grafana dashboard](docs/images/grafana-dashboard.png)
+
 ## Load Test Results
 
 _(To be filled in once Step 8 is complete — numbers only go here once they're real.)_

@@ -1,6 +1,8 @@
 package dev.siddharth.gateway.ratelimit;
 
 import dev.siddharth.gateway.tenant.TenantConfigLookupService;
+import io.micrometer.core.instrument.MeterRegistry;
+
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
 import org.springframework.http.HttpStatus;
@@ -25,12 +27,16 @@ public class TenantRateLimitGatewayFilterFactory
     private final RedisTenantBucketRegistry bucketRegistry;
     private final TenantConfigLookupService tenantConfigLookupService;
 
+    private final MeterRegistry meterRegistry;
+
     public TenantRateLimitGatewayFilterFactory(
             RedisTenantBucketRegistry bucketRegistry,
-            TenantConfigLookupService tenantConfigLookupService) {
+            TenantConfigLookupService tenantConfigLookupService,
+            MeterRegistry meterRegistry) {
         super(Config.class);
         this.bucketRegistry = bucketRegistry;
         this.tenantConfigLookupService = tenantConfigLookupService;
+        this.meterRegistry = meterRegistry;
     }
 
     @Override
@@ -42,6 +48,8 @@ public class TenantRateLimitGatewayFilterFactory
                 return complete(exchange, HttpStatus.UNAUTHORIZED);
             }
 
+            final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(TenantRateLimitGatewayFilterFactory.class);
+
             return tenantConfigLookupService.findByApiKey(apiKey)
                     .switchIfEmpty(Mono.defer(() -> complete(exchange, HttpStatus.UNAUTHORIZED).then(Mono.empty())))
                     .flatMap(tenantConfig -> bucketRegistry.tryConsume(
@@ -50,8 +58,16 @@ public class TenantRateLimitGatewayFilterFactory
                             tenantConfig.getRefillRatePerSecond())
                     .flatMap(allowed -> {
                         if (allowed) {
+                            meterRegistry.counter("gateway.requests",
+                                "tenantId", tenantConfig.getTenantId(),
+                                "result", "allowed").increment();
+                            log.info("ALLOWED tenantId={} apiKey={}", tenantConfig.getTenantId(), apiKey);
                             return chain.filter(exchange);
                         }
+                        meterRegistry.counter("gateway.requests",
+                            "tenantId", tenantConfig.getTenantId(),
+                            "result", "rate_limited").increment();
+                        log.warn("RATE_LIMITED tenantId={} apiKey={}", tenantConfig.getTenantId(), apiKey);
                         return complete(exchange, HttpStatus.TOO_MANY_REQUESTS);
                     }));
         };
