@@ -87,4 +87,23 @@ the gateway traffic and rate-limit behavior.
 
 ## Load Test Results
 
-_(To be filled in once Step 8 is complete — numbers only go here once they're real.)_
+Tested with k6 across three scenarios: steady load (3 req/s), burst (20 req/s), and multi-tenant isolation.
+ 
+| Metric | Result |
+|--------|--------|
+| p50 latency | 2.53ms |
+| p90 latency | 4.37ms |
+| p95 latency | 5.88ms |
+| p99 latency | 42.51ms |
+| Max latency | 141ms |
+| Total requests | 1,293 |
+| Allowed (200) | 109 |
+| Rate-limited (429) | 1,184 |
+| Unexpected errors (5xx) | 0 |
+| Checks passed | 100% |
+ 
+**Redis failover test:** Redis was stopped mid-load-test. The gateway continued serving requests via fail-open behavior (all requests allowed through during the outage). Latency spike was visible in Grafana at the Redis stop/start boundary. Zero 500s during the outage.
+
+![Grafana load test dashboard](docs/images/load-test-grafana.png)
+ 
+*Note: numbers above are from a local Mac development machine. Deployed free-tier numbers will differ due to resource constraints.*
