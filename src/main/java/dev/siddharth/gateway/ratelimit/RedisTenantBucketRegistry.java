@@ -1,6 +1,5 @@
 package dev.siddharth.gateway.ratelimit;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -19,9 +18,6 @@ import java.util.List;
 @Component
 public class RedisTenantBucketRegistry {
 
-    private static final long DEFAULT_CAPACITY = 5;
-    private static final double DEFAULT_REFILL_RATE_PER_SECOND = 0.5;
-
     private final ReactiveStringRedisTemplate redisTemplate;
     private final DefaultRedisScript<Long> rateLimitScript;
 
@@ -33,19 +29,20 @@ public class RedisTenantBucketRegistry {
         this.rateLimitScript.setResultType(Long.class);
     }
 
-    public Mono<Boolean> tryConsume(String tenantId) {
+    public Mono<Boolean> tryConsume(String tenantId, long capacity, double refillRatePerSecond) {
         String key = "ratelimit:" + tenantId;
         double now = Instant.now().toEpochMilli() / 1000.0;
 
         List<String> keys = List.of(key);
         List<String> args = List.of(
-                String.valueOf(DEFAULT_CAPACITY),
-                String.valueOf(DEFAULT_REFILL_RATE_PER_SECOND),
+                String.valueOf(capacity),
+                String.valueOf(refillRatePerSecond),
                 String.valueOf(now)
         );
 
         return redisTemplate.execute(rateLimitScript, keys, args)
                 .next() // execute() returns a Flux; the script returns a single value
-                .map(result -> result == 1L);
+                .map(result -> result == 1L)
+                .onErrorReturn(true); // fail open
     }
 }
